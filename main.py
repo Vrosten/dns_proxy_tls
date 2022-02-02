@@ -5,7 +5,12 @@ import threading
 
 from lib.proxy_service import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,ThreadedTcpDnsProxy,ThreadedUdpDnsProxy
 
-HOST, PORT = "192.168.0.13", 53
+#Asign the ip address of the container to bind the DNS port
+
+HOST = socket.gethostbyname(socket.gethostname())
+PORT = 9999
+print ("{} {}".format(HOST,PORT))
+#HOST, PORT = "192.168.0.13", 9999
 
 socketserver.TCPServer.allow_reuse_address = True
 socketserver.UDPServer.allow_reuse_address = True
