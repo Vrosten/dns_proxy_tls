@@ -1,51 +1,45 @@
+from audioop import add
 import socket, socketserver, threading
 import sys, getopt
-import docker
+import netifaces
+from netifaces import interfaces, ifaddresses, AF_INET
 from lib.proxy_service import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,ThreadedTcpDnsProxy,ThreadedUdpDnsProxy
 
 #Asign the ip address of the container to bind the DNS port
 
-def main(argv):
-    try:
-        opts, args = getopt.getopt(argv,"i:p:",["interface=,port="])
-    except getopt.GetoptError:
-        print (">>>> Usage: main.py -i <ip_address> -p <port>")
-        sys.exit(2)
+def main():
+    
+    interfaces = netifaces.interfaces()
+    for interface in interfaces:
+        interface_details = netifaces.ifaddresses(interface)
+        if netifaces.AF_INET in interface_details:
+            interface_dict = interface_details[netifaces.AF_INET]
+            for i in interface_dict:
+                if i['addr'] != "127.0.0.1":
+                    print(i['addr'])
+                    HOST = i['addr']
+    
+    PORT = 53
+    socketserver.TCPServer.allow_reuse_address = True
+    socketserver.UDPServer.allow_reuse_address = True
 
-    for opt,arg in opts:
-        if opt in ("-i","--interface"):
-            HOST = arg
-        elif opt in ("-p","--port"):
-            PORT = arg
+    print(">>>> Initiating DNS proxy TCP based in {}:{} <<<<".format(HOST,PORT))
+    tcp_server = ThreadedTcpDnsProxy((HOST,PORT),ThreadedDnsTcpHandler)
+    tcp_server_threaded = threading.Thread(target=tcp_server.serve_forever)
+    tcp_server_threaded.daemon = True
+    tcp_server_threaded.start()
+    print(">>>> Listen on TCP {}:{} <<<<".format(HOST,PORT))
 
-    if HOST:
-        if PORT:
-            print("{} {}".format(HOST,PORT))
-            #HOST, PORT = "192.168.0.13", 9999
+    print(">>>> Initiating DNS proxy UDP based in {}:{} <<<<".format(HOST,PORT))
+    udp_server = ThreadedUdpDnsProxy((HOST,PORT),ThreadedDnsUdpHandler)
+    udp_server_threaded = threading.Thread(target=udp_server.serve_forever)
+    udp_server_threaded.daemon = True
+    udp_server_threaded.start()
+    print(">>>> Listen on UDP {}:{} <<<<".format(HOST,PORT))
 
-            socketserver.TCPServer.allow_reuse_address = True
-            socketserver.UDPServer.allow_reuse_address = True
+    tcp_server_threaded.join()
+    udp_server_threaded.join()
 
-            print(">>>> Initiating DNS proxy TCP based in {}:{} <<<<".format(HOST,PORT))
-            tcp_server = ThreadedTcpDnsProxy((HOST,PORT),ThreadedDnsTcpHandler)
-            tcp_server_threaded = threading.Thread(target=tcp_server.serve_forever,daemon=True)
-            tcp_server_threaded.start()
-            print(">>>> Listen on TCP {}:{} <<<<".format(HOST,PORT))
-
-            print(">>>> Initiating DNS proxy UDP based in {}:{} <<<<".format(HOST,PORT))
-            udp_server = ThreadedUdpDnsProxy((HOST,PORT),ThreadedDnsUdpHandler)
-            udp_server_threaded = threading.Thread(target=udp_server.serve_forever,daemon=True)
-            udp_server_threaded.start()
-            print(">>>> Listen on UDP {}:{} <<<<".format(HOST,PORT))
-
-            tcp_server_threaded.join()
-            udp_server_threaded.join()
 
 if __name__ == "__main__":
-    print("Initiating the proxy with {}".format(sys.argv[1:]))
-  
-    client = docker.DockerClient()
-    container = client.containers.get("magical_meitner")
-    ip_add = container.attrs['NetworkSettings']['IPAddress']
-    print(ip_add)
-    #main(sys.argv[1:])
+    main()
