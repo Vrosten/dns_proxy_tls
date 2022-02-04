@@ -46,22 +46,7 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
 
 
         self.send_recv_udp_to_tcp(self.request[1],self.request[0].strip(),self.client_address)
-        #tls_sock = self.set_tcp_tl#s_conn()
-        #print(client_data)
-        #tls_sock.send(client_data)
-        #server_response = tls_sock.recv(4096)
-        #teste = self.send_udp_msg(client_data)
-        #print (self.dump(teste))
-        
-        #print("{} wrote: ".format(self.client_address[0]))
-       # 
-        
 
-        #socket.sendto(server_response,self.client_address)
-    #!/usr/bin/python
-
-
-    
     def send_udp_msg(self,received_data):
             server_address = "8.8.8.8",53
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
