@@ -9,16 +9,16 @@ from lib.proxy_service import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,Thread
 
 def main():
     
-    interfaces = netifaces.interfaces()
-    for interface in interfaces:
-        interface_details = netifaces.ifaddresses(interface)
-        if netifaces.AF_INET in interface_details:
-            interface_dict = interface_details[netifaces.AF_INET]
-            for i in interface_dict:
-                if i['addr'] != "127.0.0.1":
-                    print(i['addr'])
-                    HOST = i['addr']
-    
+    #interfaces = netifaces.interfaces()
+    #for interface in interfaces:
+    #    interface_details = netifaces.ifaddresses(interface)
+    #    if netifaces.AF_INET in interface_details:
+    #        interface_dict = interface_details[netifaces.AF_INET]
+    #        for i in interface_dict:
+    #            if i['addr'] != "127.0.0.1":
+    #                print(i['addr'])
+    #                HOST = i['addr']
+    HOST = "0.0.0.0"
     PORT = 53
     socketserver.TCPServer.allow_reuse_address = True
     socketserver.UDPServer.allow_reuse_address = True
@@ -28,6 +28,7 @@ def main():
     tcp_server_threaded = threading.Thread(target=tcp_server.serve_forever)
     tcp_server_threaded.daemon = True
     tcp_server_threaded.start()
+    #tcp_server.shutdown()
     print(">>>> Listen on TCP {}:{} <<<<".format(HOST,PORT))
 
     print(">>>> Initiating DNS proxy UDP based in {}:{} <<<<".format(HOST,PORT))
@@ -35,6 +36,7 @@ def main():
     udp_server_threaded = threading.Thread(target=udp_server.serve_forever)
     udp_server_threaded.daemon = True
     udp_server_threaded.start()
+    #udp_server.shutdown()
     print(">>>> Listen on UDP {}:{} <<<<".format(HOST,PORT))
 
     tcp_server_threaded.join()
