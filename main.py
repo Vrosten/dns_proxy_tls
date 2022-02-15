@@ -1,44 +1,59 @@
-from audioop import add
+from distutils.log import Log
+import logging
+from re import L, T
 import socket, socketserver, threading
 import sys, getopt
-import netifaces
-from netifaces import interfaces, ifaddresses, AF_INET
-from lib.proxy_service import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,ThreadedTcpDnsProxy,ThreadedUdpDnsProxy
+#import lib
+from lib.lib_sockets import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,ThreadedTcpDnsProxy,ThreadedUdpDnsProxy
+from lib.lib_config import ConfigReader
+from lib.lib_dns_servers import TlsDnsServer
+from lib.lib_logger import LoggerDNS
 
-#Asign the ip address of the container to bind the DNS port
 
 def main():
-    
-    #interfaces = netifaces.interfaces()
-    #for interface in interfaces:
-    #    interface_details = netifaces.ifaddresses(interface)
-    #    if netifaces.AF_INET in interface_details:
-    #        interface_dict = interface_details[netifaces.AF_INET]
-    #        for i in interface_dict:
-    #            if i['addr'] != "127.0.0.1":
-    #                print(i['addr'])
-    #                HOST = i['addr']
-    HOST = "0.0.0.0"
-    PORT = 53
+
+    config = ConfigReader()
+    server_list = TlsDnsServer(config)
+    server_list.check_server_certificate()
+    logger = LoggerDNS()
+   
+
+    HOST = config.all_config['InternalComm']['AddressToBind']
+    PORT = int(config.all_config['InternalComm']['PortToBind'])
+    logger.info("Read the configuration to run the DNS proxy")
+
+    # Allow to reuse the address to bind to TCP and UDP connections
     socketserver.TCPServer.allow_reuse_address = True
     socketserver.UDPServer.allow_reuse_address = True
 
+    # Creating a new object to a TCP DNS socket server to receive
+    # DNS queries over TCP
+    
     print(">>>> Initiating DNS proxy TCP based in {}:{} <<<<".format(HOST,PORT))
+    
     tcp_server = ThreadedTcpDnsProxy((HOST,PORT),ThreadedDnsTcpHandler)
     tcp_server_threaded = threading.Thread(target=tcp_server.serve_forever)
     tcp_server_threaded.daemon = True
     tcp_server_threaded.start()
-    #tcp_server.shutdown()
+    logger.info("Initiating the DNS proxy to accept TCP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, tcp_server_threaded.native_id))
+
     print(">>>> Listen on TCP {}:{} <<<<".format(HOST,PORT))
 
+    # Creating a new object to a UDP DNS socket server to receive
+    # DNS queries over UDP
+    
     print(">>>> Initiating DNS proxy UDP based in {}:{} <<<<".format(HOST,PORT))
+    
     udp_server = ThreadedUdpDnsProxy((HOST,PORT),ThreadedDnsUdpHandler)
     udp_server_threaded = threading.Thread(target=udp_server.serve_forever)
     udp_server_threaded.daemon = True
     udp_server_threaded.start()
-    #udp_server.shutdown()
+
+    logger.info("Initiating the DNS proxy to accept UDP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, udp_server_threaded.native_id))
     print(">>>> Listen on UDP {}:{} <<<<".format(HOST,PORT))
 
+    # Using the method join to keep the process running until
+    # all the threads has been closed
     tcp_server_threaded.join()
     udp_server_threaded.join()
 

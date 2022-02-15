@@ -1,5 +1,31 @@
+from pickle import TRUE
+from pkgutil import ImpImporter
 import socket, socketserver, ssl
-import struct, threading, os, select, errno
+import struct, threading, os, select, errno, sys
+from lib_config import ConfigReader
+
+
+HOST,PORT = "1.0.0.1", 853
+CONFIG = ConfigReader()
+HOST = CONFIG['DnsTlsServers']['DnsServer']
+PORT = CONFIG['DnsTlsServers']['DnsOverTlsPort']
+
+
+
+class SocketTLS:
+    def config_ssl_socket():
+
+        tls_context = ssl.create_default_context()
+        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        #tls_context.load_verify_locations("/etc/ssl/certs/ca-certificates.crt",)
+        
+        
+        sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        sock.settimeout(110)
+
+        tls_sock = tls_context.wrap_socket(sock,server_hostname=HOST)
+        tls_sock.connect((HOST,PORT))
+        return tls_sock
 
 
 class ThreadedDnsTcpHandler(socketserver.BaseRequestHandler):
@@ -12,30 +38,18 @@ class ThreadedDnsTcpHandler(socketserver.BaseRequestHandler):
         
         cur_thread = threading.current_thread()
         print("DNS TCP proxy processing thread {}. Sending request".format(cur_thread))
-        tls_sock = self.set_tcp_tls_conn()
+        tls_sock = SocketTLS.config_ssl_socket()
         tls_sock.send(received_data)
         server_response = tls_sock.recv(4096)
         self.request.sendall(server_response)
 
-
-    def set_tcp_tls_conn(self):
-        HOST,PORT = "5.1.66.255", 853
-        tls_context = ssl.create_default_context()
-        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        
-        sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        sock.settimeout(110)
-
-        tls_sock = tls_context.wrap_socket(sock,server_hostname=HOST)
-        tls_sock.connect((HOST,PORT))
-        return tls_sock
             
 
 class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         client_data = self.request[0].strip()
-        socket = self.request[1]
+        sock = self.request[1]
         client_addr = self.client_address
 
         cur_thread = threading.current_thread()
@@ -44,36 +58,9 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         print(" self.request from client {} = \n {} \n".format(client_addr, self.request)) 
         print("Query received from DNS Client\n\n {} \n\n".format(client_data))
 
+        self.send_recv_udp_to_tcp(sock,client_data,client_addr)
 
-        self.send_recv_udp_to_tcp(self.request[1],self.request[0].strip(),self.client_address)
-
-    def send_udp_msg(self,received_data):
-            server_address = "8.8.8.8",53
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                
-
-                sock.sendto(received_data,server_address)
-                data_from_dns = sock.recvfrom(4096)
-            finally:
-                sock.close()
-            
-            print("Query from DNS Server\n\n {} \n\n".format(data_from_dns))
-            return (data_from_dns[0])
-
-    def set_tcp_tls_conn(self):
-        HOST,PORT = "5.1.66.255", 853
-        tls_context = ssl.create_default_context()
-        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        
-        sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        sock.settimeout(110)
-
-        print ("TLS Socket called > {}\n ".format(sock))
-
-        tls_sock = tls_context.wrap_socket(sock,server_hostname=HOST)
-        tls_sock.connect((HOST,PORT))
-        return tls_sock
+    
 
     def send_recv_udp_to_tcp(self,udp_sock,recv_data,client_addr):
         tx_map = {}
@@ -99,7 +86,7 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
 
         if tcp_sock is None:
             print ("Calling set_tcp_tls_conn >\n ")
-            tcp_sock = self.set_tcp_tls_conn()
+            tcp_sock = SocketTLS.config_ssl_socket()
             incoming.append(tcp_sock)
         
         tcp_sock.sendall(net_short.pack(len(data)) + data)
@@ -137,6 +124,21 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         else:
             udp_sock.sendto(data,send_addr)
 
+
+
+    def send_udp_msg(self,received_data):
+            server_address = "8.8.8.8",53
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                
+
+                sock.sendto(received_data,server_address)
+                data_from_dns = sock.recvfrom(4096)
+            finally:
+                sock.close()
+            
+            print("Query from DNS Server\n\n {} \n\n".format(data_from_dns))
+            return (data_from_dns[0])
 
 
 
