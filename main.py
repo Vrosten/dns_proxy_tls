@@ -1,9 +1,6 @@
-from distutils.log import Log
 import logging
-from re import L, T
 import socket, socketserver, threading
 import sys, getopt
-#import lib
 from lib.lib_sockets import ThreadedDnsUdpHandler,ThreadedDnsTcpHandler,ThreadedTcpDnsProxy,ThreadedUdpDnsProxy
 from lib.lib_config import ConfigReader
 from lib.lib_dns_servers import TlsDnsServer
@@ -18,10 +15,11 @@ def main():
     logger = LoggerDNS()
    
 
+    logger.logger.info("Reading the configuration to run the DNS proxy")
     HOST = config.all_config['InternalComm']['AddressToBind']
     PORT = int(config.all_config['InternalComm']['PortToBind'])
-    logger.info("Read the configuration to run the DNS proxy")
 
+'''
     # Allow to reuse the address to bind to TCP and UDP connections
     socketserver.TCPServer.allow_reuse_address = True
     socketserver.UDPServer.allow_reuse_address = True
@@ -35,7 +33,7 @@ def main():
     tcp_server_threaded = threading.Thread(target=tcp_server.serve_forever)
     tcp_server_threaded.daemon = True
     tcp_server_threaded.start()
-    logger.info("Initiating the DNS proxy to accept TCP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, tcp_server_threaded.native_id))
+    logger.logger.info("Initiating the DNS proxy to accept TCP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, tcp_server_threaded.native_id))
 
     print(">>>> Listen on TCP {}:{} <<<<".format(HOST,PORT))
 
@@ -49,14 +47,14 @@ def main():
     udp_server_threaded.daemon = True
     udp_server_threaded.start()
 
-    logger.info("Initiating the DNS proxy to accept UDP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, udp_server_threaded.native_id))
+    logger.logger.info("Initiating the DNS proxy to accept UDP requests on host {} and port {}, in the current thread id {}".format(HOST, PORT, udp_server_threaded.native_id))
     print(">>>> Listen on UDP {}:{} <<<<".format(HOST,PORT))
 
     # Using the method join to keep the process running until
     # all the threads has been closed
     tcp_server_threaded.join()
     udp_server_threaded.join()
-
+'''
 
 if __name__ == "__main__":
     main()

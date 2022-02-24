@@ -2,13 +2,14 @@ from pickle import TRUE
 from pkgutil import ImpImporter
 import socket, socketserver, ssl
 import struct, threading, os, select, errno, sys
-from lib_config import ConfigReader
+from .lib_config import ConfigReader
 
 
 HOST,PORT = "1.0.0.1", 853
 CONFIG = ConfigReader()
-HOST = CONFIG['DnsTlsServers']['DnsServer']
-PORT = CONFIG['DnsTlsServers']['DnsOverTlsPort']
+print(CONFIG.all_config.sections())
+HOST = CONFIG.all_config['DnsTlsServers']['DnsServer']
+PORT = int(CONFIG.all_config['DnsTlsServers']['DnsOverTlsPort'])
 
 
 
@@ -16,7 +17,7 @@ class SocketTLS:
     def config_ssl_socket():
 
         tls_context = ssl.create_default_context()
-        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        #tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         #tls_context.load_verify_locations("/etc/ssl/certs/ca-certificates.crt",)
         
         
@@ -42,6 +43,7 @@ class ThreadedDnsTcpHandler(socketserver.BaseRequestHandler):
         tls_sock.send(received_data)
         server_response = tls_sock.recv(4096)
         self.request.sendall(server_response)
+        tls_sock.close()
 
             
 
