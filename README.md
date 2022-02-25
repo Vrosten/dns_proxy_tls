@@ -1,3 +1,51 @@
+SECTION 1 - HOW TO DEPLOY
+
+This code can run directly in the host, or be used as a container image for docker and docket compatible. 
+Being a proxy, it needs to listen for a given ip address and port, and usually it has been configured to 
+listen on 0.0.0.0 bind the port 53 to perform the role of DNS server in the network. 
+
+>>>> Deploying within a host:
+1. In the etc/proxy.conf file just keep the default configuration to let the host be available to receive
+	the external connections. 
+2. Once it requires to bind a port, the application requires elevate privilege to manage the resource, thus
+	it's has been deployed by initiating the application with this command 'sudo python3 main.py &' to let
+	the execution be on background. 
+3. To close this application, it's required to find the process id and send a kill command
+
+>>>> Deploying as container:
+1. This code has been deployed using these commands:
+	sudo docker build -t dns_proxy .
+	sudo docker run -d -p 53:53/TCP -p 53:53/UDP -t dns_proxy
+
+	You can alternatively run this container to be available only locally within Docker network context:
+	sudo docker run -t dns_proxy
+
+2. If you choose to use this container only available internally in Docker network, you will need to point the 
+	DNS configuration of all other containers to the internall ip address got to DNS proxy. In Docker ecosystem 
+	it can be find executing:
+	
+	sudo docker container ls | grep -vi container | awk -F" " '{ print $1 }' | xargs sudo docker container inspect | grep -i ipaddress
+
+	The response will be in json formatting providing you the current ip address of the container.
+
+	Further, any image can be run using the command option '--dns <ip_address_of_dns_proxy_container>', which will 
+	enforce this specific container to query the DNS proxy container instead the normal DNS server available in the network 
+	or in the Internet.
+
+
+>>>> Configuration files:
+proxy.conf: Main configuration file which has all the essencial parameters such as:
+			[InternalComm] > Parameters related how the proxy will listen and receive the queries
+			[DnsTlsServers] > Parameters related with what DNS over TLS server will be queried by this proxy
+			[LoggerConfig] > Parameters related with the logger class, and where the logs will be recorded
+
+servers_list.conf: This file can be ignored for while because the proxy currently is not looking at this list.
+					It will be used in the future and this feature will be implemented.
+
+=========================================================================================================================
+
+SECTION 2 - Questions & Answers
+
 1. How do you build, run and use your proxy locally?
 
 - First you need to define which IP address will be used to listen the DNS queries in /etc/proxy.conf file, specifically in the option 'AddressToBind' under the section '[InternalComm]'. By default, the program will allocate the 0.0.0.0 to listen locally the requests. 
