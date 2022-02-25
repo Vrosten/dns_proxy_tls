@@ -1,49 +1,47 @@
+import configparser
+from http import client
 from pickle import TRUE
 from pkgutil import ImpImporter
+from pydoc import cli
 import socket, socketserver, ssl
 import struct, threading, os, select, errno, sys
 from .lib_config import ConfigReader
+from .lib_dns_servers import TlsDnsServer
+from .lib_logger import LoggerDNS
 
-
-HOST,PORT = "1.0.0.1", 853
-CONFIG = ConfigReader()
-print(CONFIG.all_config.sections())
-HOST = CONFIG.all_config['DnsTlsServers']['DnsServer']
-PORT = int(CONFIG.all_config['DnsTlsServers']['DnsOverTlsPort'])
-
-
+config = ConfigReader()
+logger = LoggerDNS()
+_HOST_ = config.all_config['DnsTlsServers']['DnsServer']
+_PORT_ = int(config.all_config['DnsTlsServers']['DnsOverTlsPort'])
 
 class SocketTLS:
     def config_ssl_socket():
-
         tls_context = ssl.create_default_context()
-        #tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         #tls_context.load_verify_locations("/etc/ssl/certs/ca-certificates.crt",)
-        
         
         sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         sock.settimeout(110)
 
-        tls_sock = tls_context.wrap_socket(sock,server_hostname=HOST)
-        tls_sock.connect((HOST,PORT))
+        tls_sock = tls_context.wrap_socket(sock,server_hostname=_HOST_)
+        tls_sock.connect((_HOST_,_PORT_))
         return tls_sock
 
 
 class ThreadedDnsTcpHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
-        received_data = self.request.recv(1024).strip()
 
-        print(type(received_data))
-        print("Received data {}".format(received_data))
-        
+        received_data = self.request.recv(1024).strip()
+        client_addr = self.client_address
         cur_thread = threading.current_thread()
-        print("DNS TCP proxy processing thread {}. Sending request".format(cur_thread))
+
+        logger.logger.info("Receiving a DNS over TCP querying from {} under thread {}".format(client_addr,cur_thread))
         tls_sock = SocketTLS.config_ssl_socket()
         tls_sock.send(received_data)
         server_response = tls_sock.recv(4096)
         self.request.sendall(server_response)
         tls_sock.close()
+        logger.logger.info("Sent query response to {} under thread {}".format(client_addr,cur_thread))
 
             
 
@@ -55,13 +53,13 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         client_addr = self.client_address
 
         cur_thread = threading.current_thread()
-        print("DNS UDP<>TCP proxy processing thread {}. Sending request".format(cur_thread))
-
-        print(" self.request from client {} = \n {} \n".format(client_addr, self.request)) 
-        print("Query received from DNS Client\n\n {} \n\n".format(client_data))
+        #print("DNS UDP<>TCP proxy processing thread {}. Sending request".format(cur_thread))
+        logger.logger.info("Receiving a DNS over UDP querying from {} under thread {}".format(client_addr,cur_thread))
+        #print(" self.request from client {} = \n {} \n".format(client_addr, self.request)) 
+        #print("Query received from DNS Client\n\n {} \n\n".format(client_data))
 
         self.send_recv_udp_to_tcp(sock,client_data,client_addr)
-
+        logger.logger.info("Sent query response to {} under thread {}".format(client_addr,cur_thread))
     
 
     def send_recv_udp_to_tcp(self,udp_sock,recv_data,client_addr):
@@ -72,7 +70,7 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         incoming = [udp_sock]
         tcp_sock = None
 
-        print ("incoming > {}\n ".format(incoming))
+        #print ("incoming > {}\n ".format(incoming))
 
         s_in, s_out, s_ext = select.select(incoming, [], [], 10)
 
@@ -84,10 +82,10 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         (tx_id,) = net_short.unpack_from(data)
         tx_map[tx_id] = src
             
-        print("UDP received {} bytes from: {}, tx_id={}".format(len(data),src,tx_id))
+        #print("UDP received {} bytes from: {}, tx_id={}".format(len(data),src,tx_id))
 
         if tcp_sock is None:
-            print ("Calling set_tcp_tls_conn >\n ")
+            #print ("Calling set_tcp_tls_conn >\n ")
             tcp_sock = SocketTLS.config_ssl_socket()
             incoming.append(tcp_sock)
         
@@ -97,30 +95,34 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
         if not to_recv:
             data = tcp_sock.recv(2)
             if not data:
-                print("DNS Server closed connect, removing from loop")
+                #print("DNS Server closed connect, removing from loop")
                 incoming.remove(tcp_sock)
                 tcp_sock.close()
                 tcp_sock = None
-                if tx_map: print("Unresolved queries: {}".format(map(hex, tx_map.keys())))
+                if tx_map: 
+                    print("Unresolved queries: {}".format(map(hex, tx_map.keys())))
+                    logger.logger.warning("Client {} has unresolved queries {}".format(client_addr,map(hex, tx_map.keys())))
                 tx_map.clear()
                 #continue
             (to_recv,) = net_short.unpack_from(data)
             
         data = tcp_sock.recv(to_recv)
         if not data:
+            logger.logger.warning("DNS server closed connection in transit for client {} query".format(client_addr,map(hex, tx_map.keys())))
             raise EOFError("DNS server closed connection in transit for %d bytes"%(to_recv,))
+            
             
         tcp_data_buffer.append(data)
         to_recv -= len(data)
-        if to_recv:
-            print("TCP need additional {} bytes".format(to_recv))
+        #if to_recv:
+            #print("TCP need additional {} bytes".format(to_recv))
             #continue
         data = b"".join(tcp_data_buffer)
         tcp_data_buffer[:] = []
         to_recv = 0
         (tx_id,) = net_short.unpack_from(data)
         send_addr = tx_map.pop(tx_id, None)
-        print("tcp reply %d bytes to %r, tx_id=0x%04x", len(data), send_addr, tx_id)
+        #print("tcp reply %d bytes to %r, tx_id=0x%04x", len(data), send_addr, tx_id)
         if send_addr is None: 
             print("No matching tx_id, already processed?")
         else:
@@ -132,8 +134,6 @@ class ThreadedDnsUdpHandler(socketserver.BaseRequestHandler):
             server_address = "8.8.8.8",53
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                
-
                 sock.sendto(received_data,server_address)
                 data_from_dns = sock.recvfrom(4096)
             finally:

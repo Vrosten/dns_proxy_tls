@@ -10,8 +10,6 @@ from lib.lib_logger import LoggerDNS
 def main():
 
     config = ConfigReader()
-    server_list = TlsDnsServer(config)
-    server_list.check_server_certificate()
     logger = LoggerDNS()
    
 
@@ -19,7 +17,6 @@ def main():
     HOST = config.all_config['InternalComm']['AddressToBind']
     PORT = int(config.all_config['InternalComm']['PortToBind'])
 
-'''
     # Allow to reuse the address to bind to TCP and UDP connections
     socketserver.TCPServer.allow_reuse_address = True
     socketserver.UDPServer.allow_reuse_address = True
@@ -54,7 +51,6 @@ def main():
     # all the threads has been closed
     tcp_server_threaded.join()
     udp_server_threaded.join()
-'''
 
 if __name__ == "__main__":
     main()
